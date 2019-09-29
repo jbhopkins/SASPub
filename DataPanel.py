@@ -32,11 +32,13 @@ from io import open
 if __name__ == "__main__" and __package__ is None:
     __package__ = "SASPub"
 
+import os.path
+import collections
+import platform
+
 import wx
 import wx.lib.agw.ultimatelistctrl as ULC
 import wx.lib.scrolledpanel as scrolled
-
-import os.path
 
 import SASFileIO
 
@@ -79,10 +81,12 @@ class DataPanel(wx.Panel):
         self.SetSizer(ctrl_sizer)
 
     def _initialize(self):
-        self.loaded_files = []
+        self.loaded_files = collections.OrderedDict()
 
         standard_paths = wx.StandardPaths.Get()
         self.current_directory = standard_paths.GetUserLocalDataDir()
+
+        self.top_window = self.GetParent()
 
     def _on_load(self, evt):
 
@@ -116,8 +120,13 @@ class DataPanel(wx.Panel):
 
         for data in data_list:
             new_data_item = DataItemPanel(self.list_panel, data)
+
+            item_id = self.top_window.NewControlId()
+            data.id = item_id
+
             self.list_sizer.Add(new_data_item, flag=wx.EXPAND)
-            self.loaded_files.append((data, new_data_item))
+            self.loaded_files[item_id] = (data, new_data_item)
+
             data.item_panel = new_data_item
 
         self.list_panel.SetVirtualSize(self.list_panel.GetBestVirtualSize())
@@ -126,9 +135,67 @@ class DataPanel(wx.Panel):
 
         self.list_panel.Thaw()
 
-
     def _on_remove(self, evt):
-        pass
+        selected_items = self.get_selected_item_ids()
+        wx.CallAfter(self.remove_items, selected_items)
+
+    def remove_items(self, item_ids):
+        self.list_panel.Freeze()
+
+        for item_id in item_ids:
+            data = self.loaded_files[item_id]
+
+            data[1].Destroy()
+
+            del self.loaded_files[item_id]
+
+        self.list_panel.SetVirtualSize(self.list_panel.GetBestVirtualSize())
+        self.list_panel.Layout()
+        self.list_panel.Refresh()
+
+        self.list_panel.Thaw()
+
+    def deselect_all_except_one(self, data_id):
+        self.list_panel.Freeze()
+
+        for item_id, data in self.loaded_files.items():
+            if item_id != data_id:
+                if data[1].selected:
+                    data[1].toggle_select()
+
+        self.list_panel.Thaw()
+
+    def select_all(self):
+        self.list_panel.Freeze()
+
+        for item_id, data in self.loaded_files.items():
+            if not data[1].selected:
+                data[1].toggle_select()
+
+        self.list_panel.Thaw()
+
+    def get_selected_items(self):
+        selected_items = []
+
+        for each in self.loaded_files.values():
+            if each[1].selected:
+                selected_items.append(each[1])
+
+        return selected_items
+
+    def get_selected_item_ids(self):
+        selected_items = []
+
+        for key, data in self.loaded_files.items():
+            if data[1].selected:
+                selected_items.append(key)
+
+        return selected_items
+
+    def get_data_item_panels(self):
+        data_item_panels = [item[1] for item in self.loaded_files.values()]
+
+        return data_item_panels
 
 class DataItemPanel(wx.Panel):
 
@@ -137,20 +204,22 @@ class DataItemPanel(wx.Panel):
         wx.Panel.__init__(self, parent, *args, style=wx.BORDER_RAISED, **kwargs)
 
         self.data = data
-        self.data_panel = parent.GetParent()
+        self.data_panel = parent.GetParent().GetParent()
 
         self._create_layout()
 
-        self.Bind(wx.EVT_LEFT_DOWN, self._onLeftMouseButton)
-        self.Bind(wx.EVT_RIGHT_DOWN, self._onRightMouseButton)
-        self.Bind(wx.EVT_KEY_DOWN, self._onKeyPress)
+        self.Bind(wx.EVT_LEFT_DOWN, self._on_left_mouse_button)
+        self.Bind(wx.EVT_RIGHT_DOWN, self._on_right_mouse_button)
+        self.Bind(wx.EVT_KEY_DOWN, self._on_key_press)
 
         opsys = platform.system()
 
         if opsys != 'Darwin':
-            self.name.Bind(wx.EVT_LEFT_DOWN, self._onLeftMouseButton)
-            self.name.Bind(wx.EVT_RIGHT_DOWN, self._onRightMouseButton)
-            self.name.Bind(wx.EVT_KEY_DOWN, self._onKeyPress)
+            self.name.Bind(wx.EVT_LEFT_DOWN, self._on_left_mouse_button)
+            self.name.Bind(wx.EVT_RIGHT_DOWN, self._on_right_mouse_button)
+            self.name.Bind(wx.EVT_KEY_DOWN, self._on_key_press)
+
+        self._initialize()
 
     def _create_layout(self):
 
@@ -161,70 +230,84 @@ class DataItemPanel(wx.Panel):
         self.SetSizer(top_sizer)
         self.SetBackgroundColour(wx.Colour(250,250,250))
 
-    def _onKeyPress(self, evt):
+    def _initialize(self):
+        self.selected = False
+
+        self.highlight_bkg_color = wx.SystemSettings.GetColour(wx.SYS_COLOUR_HIGHLIGHT)
+
+    def _on_key_press(self, evt):
 
         key = evt.GetKeyCode()
 
-        # if ((key == wx.WXK_DELETE) or (key == wx.WXK_BACK and evt.CmdDown())) and self._selected == True:
-        #     self.removeSelf()
-        # elif key == 65 and evt.CmdDown(): #A
-        #     self.sec_panel.selectAll()
-        pass
+        if ((key == wx.WXK_DELETE) or (key == wx.WXK_BACK and evt.CmdDown())) and self.selected == True:
+            self.removeSelf()
+        elif key == 65 and evt.CmdDown(): #A
+            self.data_panel.select_all()
 
-    def _onRightMouseButton(self, evt):
-        # self.SetFocusIgnoringChildren()
-
-        # if not self._selected:
-        #     self.toggleSelect()
-        #     self.sec_panel.deselectAllExceptOne(self)
+    def _on_right_mouse_button(self, evt):
+        if not self.selected:
+            self.toggle_select()
+            self.data_panel.deselect_all_except_one(self.data.id)
 
         # if int(wx.__version__.split('.')[0]) >= 3 and platform.system() == 'Darwin':
         #     wx.CallAfter(self._showPopupMenu)
         # else:
         #     self._showPopupMenu()
-        pass
 
-    def _onLeftMouseButton(self, evt):
+    def _on_left_mouse_button(self, evt):
 
-        ###### HERE ###########
         ctrl_is_down = evt.CmdDown()
         shift_is_down = evt.ShiftDown()
 
-        sec_panel = wx.FindWindowByName('SECPanel')
-
         if shift_is_down:
+            self.data_panel.list_panel.Freeze()
+
             try:
+                selected_items = self.data_panel.get_selected_items()
+                data_item_panels = self.data_panel.get_data_item_panels()
 
-                first_marked_item_idx = sec_panel.all_manipulation_items.index(sec_panel.getSelectedItems()[0])
-                last_marked_item = sec_panel.getSelectedItems()[-1]
-                last_marked_item_idx = sec_panel.all_manipulation_items.index(last_marked_item)
+                first_item = selected_items[0]
+                first_item_idx = data_item_panels.index(first_item)
 
-                this_item_idx = sec_panel.all_manipulation_items.index(self)
+                last_item = selected_items[-1]
+                last_item_idx = data_item_panels.index(last_item)
 
-                if last_marked_item_idx > this_item_idx:
+                this_item_idx = data_item_panels.index(self)
+
+                if last_item_idx > this_item_idx:
                     adj = 0
-                    idxs = [first_marked_item_idx, this_item_idx]
+                    idxs = [first_item_idx, this_item_idx]
                 else:
-                    idxs = [last_marked_item_idx, this_item_idx]
+                    idxs = [last_item_idx, this_item_idx]
                     adj = 1
 
                 top_item = max(idxs)
                 bottom_item = min(idxs)
 
-                item_list = sec_panel.all_manipulation_items[bottom_item+adj:top_item+adj]
-                for i in range(len(item_list)):
-                    each = item_list[i]
-                    if i != len(item_list)-1:
-                        each.toggleSelect(update_info = False)
-                    else:
-                        each.toggleSelect()
+                item_list = data_item_panels[bottom_item+adj:top_item+adj]
+                for each in item_list:
+                    each.toggle_select()
             except IndexError:
                 pass
 
+            self.data_panel.list_panel.Thaw()
+
         elif ctrl_is_down:
-            self.toggleSelect()
+            self.toggle_select()
         else:
-            sec_panel.deselectAllExceptOne(self)
-            self.toggleSelect()
+            self.data_panel.deselect_all_except_one(self.data.id)
+            self.toggle_select()
 
         evt.Skip()
+
+    def toggle_select(self):
+
+        if self.selected:
+            self.selected = False
+            self.SetBackgroundColour(wx.Colour(250,250,250))
+        else:
+            self.selected = True
+
+            self.SetBackgroundColour(self.highlight_bkg_color)
+
+        self.Refresh()
