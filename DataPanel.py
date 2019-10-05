@@ -129,6 +129,8 @@ class DataPanel(wx.Panel):
 
             data.item_panel = new_data_item
 
+        self.top_window.plot_panel.load_data(data_list)
+
         self.list_panel.SetVirtualSize(self.list_panel.GetBestVirtualSize())
         self.list_panel.Layout()
         self.list_panel.Refresh()

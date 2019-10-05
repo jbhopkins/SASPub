@@ -36,7 +36,7 @@ import numpy as np
 
 class ProfileData(object):
 	
-	def __init__(self, q, i, err, parameters, fit_q=None, fit_i=None, fit_err=None):
+	def __init__(self, q, i, err, fit_q=None, fit_i=None, fit_err=None):
 
 		self.q = q
 		self.i = i
@@ -46,12 +46,20 @@ class ProfileData(object):
 		self.fit_i = fit_i
 		self.fit_err = fit_err
 
-		self.parameters = parameters
-
 		if self.fit_i is not None:
 			self.has_fit = True
 		else:
 			self.has_fit = False
 
+		self.rg = None
+		self.rg_err = None
+		self.i0 = None
+		self.i0_err = None
+		self.guinier_qmin = None
+		self.guinier_qmax = None
+
 class SeriesData(object):
+	pass
+
+class IFTData(object):
 	pass
