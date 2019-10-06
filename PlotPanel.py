@@ -33,6 +33,7 @@ if __name__ == "__main__" and __package__ is None:
     __package__ = "SASPub"
 
 from itertools import cycle
+import copy
 
 import numpy as np
 import wx
@@ -237,15 +238,24 @@ class PlotTab(wx.Panel):
             self.is_series_plot = False
 
 
-        self.default_plot_settings = {'norm_residuals'    : True,
-            'auto_limits'           : True,
+        self.plot_settings = {
+            'norm_residuals'    : True,
+            'auto_limits'       : True,
+            'min_x_scale'       : 0.97,
+            'max_x_scale'       : 1.03,
+            'min_y_scale'       : 0.97,
+            'max_y_scale'       : 1.03,
+            }
+
+        self.default_line_settings = {
             'show_error_bars'       : False,
             'default_line_style'    : 'None',
             'default_marker_style'  : 'Auto',
-            'default_marker_cycler' : cycle(['o', 'v', 's', '^',  'D', '<', 'X', '>', 'p', '*', 'h'])
+            'default_marker_cycler' : cycle(['o', 'v', 's', '^',  'D', '<', 'X', '>', 'p', '*', 'h']),
             }
 
         self.plotted_data = {}
+        self.line_settings = {}
 
     def ax_redraw(self, widget=None):
         self.canvas.mpl_disconnect(self.cid)
@@ -312,7 +322,8 @@ class PlotTab(wx.Panel):
             elif self.plot_type == 'guinier' and fit is not None:
                 lines1 = self.subplot1.errorbar(x, y, err, zorder=1)
                 fitlines = self.subplot1.plot(x[q_idx_min:q_idx_max+1], fit[q_idx_min:q_idx_max+1], color='k', zorder=2)
-                lines2 = self.subplot2.plot(x[q_idx_min:q_idx_max+1], residual[q_idx_min:q_idx_max+1], 'o')
+                lines2 = self.subplot2.plot(x[q_idx_min:q_idx_max+1], residual[q_idx_min:q_idx_max+1], 'o', zorder=2)
+                zero_line = self.subplot2.axhline(color='k', zorder=1)
                 
             else:
                 lines1 = None
@@ -323,25 +334,14 @@ class PlotTab(wx.Panel):
             lines2 = None
             fitlines = None
 
-        if lines1 is not None:
-            line, ec, el = lines1
-
-            for each in ec:
-                each.set_visible(self.default_plot_settings['show_error_bars'])
-            for each in el:
-                each.set_visible(self.default_plot_settings['show_error_bars'])
-
-            line.set_linestyle(self.default_plot_settings['default_line_style'])
-
-            if self.default_plot_settings['default_marker_style'] != 'Auto':
-                line.set_marker(self.default_plot_settings['default_marker_style'])
-            else:
-                line.set_marker(next(self.default_plot_settings['default_marker_cycler']))
-            
-
         self.plotted_data[data.id] = {'data': data, 'lines': (lines1, lines2, fitlines)}
 
-        if self.default_plot_settings['auto_limits']:
+        self.line_settings[data.id] = copy.copy(self.default_line_settings)
+        self.line_settings[data.id]['default_marker_cycler'] = self.default_line_settings['default_marker_cycler']
+
+        self.update_line_settings(data)
+
+        if self.plot_settings['auto_limits']:
             self.do_auto_limits()
 
     def plot_ift(self, data):
@@ -355,7 +355,7 @@ class PlotTab(wx.Panel):
 
         residual = data.i - fit
 
-        if self.default_plot_settings['norm_residuals']:
+        if self.plot_settings['norm_residuals']:
             residual = residual/data.err
 
         data.guinier_fit = fit
@@ -364,6 +364,11 @@ class PlotTab(wx.Panel):
         return fit, residual
 
     def do_auto_limits(self):
+
+        min_x_scale = self.plot_settings['min_x_scale']
+        max_x_scale = self.plot_settings['max_x_scale']
+        min_y_scale = self.plot_settings['min_y_scale']
+        max_y_scale = self.plot_settings['max_y_scale']
 
         if self.plot_type == 'guinier':
             plot_q_min = 0
@@ -428,9 +433,9 @@ class PlotTab(wx.Panel):
             if intensity_max is None:
                 intensity_max = 0.1
 
-            self.subplot1.set_xlim(plot_q_min**2, plot_q_max**2)
-            self.subplot1.set_ylim(intensity_min, intensity_max)
-            self.subplot2.set_ylim(residual_min, residual_max)
+            self.subplot1.set_xlim(plot_q_min**2*min_x_scale, plot_q_max**2*max_x_scale)
+            self.subplot1.set_ylim(intensity_min*min_y_scale, intensity_max*max_y_scale)
+            self.subplot2.set_ylim(residual_min*min_y_scale, residual_max*max_y_scale)
 
         elif self.plot_type == 'loglog' or self.plot_type == 'loglin':
 
@@ -482,8 +487,8 @@ class PlotTab(wx.Panel):
             if intensity_max is None:
                 intensity_max = 0.1
 
-            self.subplot1.set_xlim(plot_q_min, plot_q_max)
-            self.subplot1.set_ylim(intensity_min, intensity_max)
+            self.subplot1.set_xlim(plot_q_min*min_x_scale, plot_q_max*max_x_scale)
+            self.subplot1.set_ylim(intensity_min*min_y_scale, intensity_max*max_y_scale)
 
         elif self.plot_type == 'dimkratky':
 
@@ -539,8 +544,8 @@ class PlotTab(wx.Panel):
             if intensity_max is None:
                 intensity_max = 0.1
 
-            self.subplot1.set_xlim(plot_q_min, plot_q_max)
-            self.subplot1.set_ylim(intensity_min, intensity_max)
+            self.subplot1.set_xlim(plot_q_min*min_x_scale, plot_q_max*max_x_scale)
+            self.subplot1.set_ylim(intensity_min*min_y_scale, intensity_max*max_y_scale)
 
         elif self.plot_type == 'ift':
             pass
@@ -549,3 +554,24 @@ class PlotTab(wx.Panel):
             pass
 
         self.canvas.draw()
+
+    def update_line_settings(self, data):
+
+        line_settings = self.line_settings[data.id]
+
+        lines1 = self.plotted_data[data.id]['lines'][0]
+
+        if lines1 is not None:
+            line, ec, el = lines1
+
+            for each in ec:
+                each.set_visible(line_settings['show_error_bars'])
+            for each in el:
+                each.set_visible(line_settings['show_error_bars'])
+
+            line.set_linestyle(line_settings['default_line_style'])
+
+            if line_settings['default_marker_style'] != 'Auto':
+                line.set_marker(line_settings['default_marker_style'])
+            else:
+                line.set_marker(next(line_settings['default_marker_cycler']))
