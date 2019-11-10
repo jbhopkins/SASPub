@@ -25,10 +25,6 @@ This file contains basic functions for processing on one more or scattering prof
 including averaging, subtracting, and merging.
 '''
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-from builtins import object, range, map
-from io import open
-
 if __name__ == "__main__" and __package__ is None:
     __package__ = "SASPub"
 

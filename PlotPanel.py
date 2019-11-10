@@ -25,10 +25,6 @@ This file contains basic functions for processing on one more or scattering prof
 including averaging, subtracting, and merging.
 '''
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-from builtins import object, range, map
-from io import open
-
 if __name__ == "__main__" and __package__ is None:
     __package__ = "SASPub"
 
@@ -39,6 +35,7 @@ import numpy as np
 import wx
 import wx.lib.agw.ultimatelistctrl as ULC
 import wx.aui as aui
+import wx.lib.scrolledpanel as scrolled
 import matplotlib as mpl
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg
 from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg
@@ -56,24 +53,10 @@ class PlotPanel(wx.Panel):
 
         wx.Panel.__init__(self, *args, **kwargs)
 
-        self._create_layout()
         self._initialize()
+        self._create_layout()
 
         self.Layout()
-
-    def _create_layout(self):
-
-        ctrl_sizer = wx.StaticBoxSizer(wx.VERTICAL, self, "Plot Controls")
-        static_box = ctrl_sizer.GetStaticBox()
-
-        self.plot_notebook = aui.AuiNotebook(self, style = aui.AUI_NB_TAB_MOVE | aui.AUI_NB_TAB_SPLIT | aui.AUI_NB_SCROLL_BUTTONS)
-
-        top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(ctrl_sizer, border=5, flag=wx.ALL)
-        top_sizer.Add(self.plot_notebook, border=5, flag=wx.ALL|wx.EXPAND, proportion=1)
-
-
-        self.SetSizer(top_sizer)
 
     def _initialize(self):
         self.plots = []
@@ -86,6 +69,93 @@ class PlotPanel(wx.Panel):
             'dimkratky'     : 'Dim. Kratky',
             'guinier'       : 'Guinier',
             }
+
+        self.plot_ctrls = {}
+
+    def _create_layout(self):
+
+        ctrl_sizer = wx.StaticBoxSizer(wx.VERTICAL, self, "Plot Controls")
+        static_box = ctrl_sizer.GetStaticBox()
+
+        self.control_notebook = wx.Notebook(static_box)
+        self.control_notebook.AddPage(self._create_axes_tick_ctrl(self.control_notebook), 'Axes', select=True)
+
+        ctrl_sizer.Add(self.control_notebook, border=5, flag=wx.ALL|wx.EXPAND, proportion=1)
+
+        self.plot_notebook = aui.AuiNotebook(self, style = aui.AUI_NB_TAB_MOVE | aui.AUI_NB_TAB_SPLIT | aui.AUI_NB_SCROLL_BUTTONS)
+
+        self.plot_notebook.Bind(aui.EVT_AUINOTEBOOK_PAGE_CHANGED, self._on_plot_change)
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(ctrl_sizer, border=5, flag=wx.ALL|wx.EXPAND, proportion=1)
+        top_sizer.Add(self.plot_notebook, border=5, flag=wx.ALL|wx.EXPAND, proportion=2)
+
+        self.SetSizer(top_sizer)
+
+        self.plot_ctrl_lookup = {value[0] : key for (key, value) in self.plot_ctrls.items()}
+
+    def _create_axes_tick_ctrl(self, parent):
+
+        top_panel = scrolled.ScrolledPanel(parent)
+        top_panel.SetVirtualSize((200, 200))
+        top_panel.SetScrollRate(20, 20)
+
+        left_axis = wx.CheckBox(top_panel, label='Left')
+        right_axis = wx.CheckBox(top_panel, label='Right')
+        bottom_axis = wx.CheckBox(top_panel, label='Bottom')
+        top_axis = wx.CheckBox(top_panel, label='Top')
+
+        left_axis.Bind(wx.EVT_CHECKBOX, self._on_plot_update)
+        right_axis.Bind(wx.EVT_CHECKBOX, self._on_plot_update)
+        bottom_axis.Bind(wx.EVT_CHECKBOX, self._on_plot_update)
+        top_axis.Bind(wx.EVT_CHECKBOX, self._on_plot_update)
+
+        axes_sizer = wx.FlexGridSizer(rows=2, cols=2, vgap=2, hgap=2)
+        axes_sizer.Add(left_axis)
+        axes_sizer.Add(right_axis)
+        axes_sizer.Add(bottom_axis)
+        axes_sizer.Add(top_axis)
+
+        major_x_axis = wx.CheckBox(top_panel, label='X')
+        major_y_axis = wx.CheckBox(top_panel, label='Y')
+
+        major_x_axis.Bind(wx.EVT_CHECKBOX, self._on_plot_update)
+        major_y_axis.Bind(wx.EVT_CHECKBOX, self._on_plot_update)
+
+        major_sizer = wx.FlexGridSizer(rows=1, cols=2, vgap=2, hgap=2)
+        major_sizer.Add(major_x_axis)
+        major_sizer.Add(major_y_axis)
+
+        minor_x_axis = wx.CheckBox(top_panel, label='X')
+        minor_y_axis = wx.CheckBox(top_panel, label='Y')
+
+        minor_x_axis.Bind(wx.EVT_CHECKBOX, self._on_plot_update)
+        minor_y_axis.Bind(wx.EVT_CHECKBOX, self._on_plot_update)
+
+        minor_sizer = wx.FlexGridSizer(rows=1, cols=2, vgap=2, hgap=2)
+        minor_sizer.Add(minor_x_axis)
+        minor_sizer.Add(minor_y_axis)
+
+        top_sizer = wx.FlexGridSizer(rows=3, cols=2, vgap=2, hgap=2)
+        top_sizer.Add(wx.StaticText(top_panel, label='Axes'))
+        top_sizer.Add(axes_sizer)
+        top_sizer.Add(wx.StaticText(top_panel, label='Major Ticks'))
+        top_sizer.Add(major_sizer)
+        top_sizer.Add(wx.StaticText(top_panel, label='Minor Ticks'))
+        top_sizer.Add(minor_sizer)
+
+        self.plot_ctrls['axis_left_on'] = (left_axis, left_axis.GetValue, left_axis.SetValue, 'bool')
+        self.plot_ctrls['axis_right_on'] = (right_axis, right_axis.GetValue, right_axis.SetValue, 'bool')
+        self.plot_ctrls['axis_top_on'] = (top_axis, top_axis.GetValue, top_axis.SetValue, 'bool')
+        self.plot_ctrls['axis_bottom_on'] = (bottom_axis, bottom_axis.GetValue, bottom_axis.SetValue, 'bool')
+        self.plot_ctrls['major_ticks_x'] = (major_x_axis, major_x_axis.GetValue, major_x_axis.SetValue, 'bool')
+        self.plot_ctrls['major_ticks_y'] = (major_y_axis, major_y_axis.GetValue, major_y_axis.SetValue, 'bool')
+        self.plot_ctrls['minor_ticks_x'] = (minor_x_axis, minor_x_axis.GetValue, minor_x_axis.SetValue, 'bool')
+        self.plot_ctrls['minor_ticks_y'] = (minor_y_axis, minor_y_axis.GetValue, minor_y_axis.SetValue, 'bool')
+
+        top_panel.SetSizer(top_sizer)
+
+        return top_panel
 
     def load_data(self, data):
         self._on_load(data)
@@ -161,6 +231,49 @@ class PlotPanel(wx.Panel):
         self.plot_notebook.AddPage(plot_tab, name)
 
         self.plots.append(plot_type)
+
+        if self.plot_notebook.GetPageCount():
+            self._update_settings_from_plot()
+
+    def _on_plot_update(self, evt):
+
+        ctrl = evt.GetEventObject()
+
+        item_key = self.plot_ctrl_lookup[ctrl]
+
+        value = self.plot_ctrls[item_key][1]()
+
+        if self.plot_ctrls[item_key][3] == 'int':
+            value = int(value)
+        elif self.plot_ctrls[item_key][3] == 'float':
+            value = float(value)
+
+        update_dict = {item_key :  value}
+
+        current_plot_tab = self.plot_notebook.GetCurrentPage()
+
+        if current_plot_tab is not None:
+            current_plot_tab.change_plot_settings(update_dict)
+
+        pass
+
+    def _update_settings_from_plot(self):
+
+        current_plot_tab = self.plot_notebook.GetCurrentPage()
+
+        if current_plot_tab is not None:
+            for key, value in current_plot_tab.plot_settings.items():
+
+                if key in self.plot_ctrls:
+                    item_vals = self.plot_ctrls[key]
+
+                    if item_vals[3] == 'bool':
+                        item_vals[2](value)
+                    else:
+                        item_vals[2](str(value))
+
+    def _on_plot_change(self, evt):
+        self._update_settings_from_plot()
 
 
 class PlotTab(wx.Panel):
@@ -241,10 +354,36 @@ class PlotTab(wx.Panel):
         self.plot_settings = {
             'norm_residuals'    : True,
             'auto_limits'       : True,
-            'min_x_scale'       : 0.97,
-            'max_x_scale'       : 1.03,
-            'min_y_scale'       : 0.97,
-            'max_y_scale'       : 1.03,
+
+            'tick_position_x'   : 'in',
+            'major_ticks_x'     : True,
+            'minor_ticks_x'     : False,
+            'tick_position_y'   : 'in',
+            'major_ticks_y'     : True,
+            'minor_ticks_y'     : True,
+            'tick_position_x2'  : 'in',
+            'major_ticks_x2'    : True,
+            'minor_ticks_x2'    : False,
+            'tick_position_y2'  : 'in',
+            'major_ticks_y2'    : True,
+            'minor_ticks_y2'    : True,
+            'label_top'         : False,
+            'label_bottom'      : True,
+            'label_right'       : False,
+            'label_left'        : True,
+            'label_top2'        : False,
+            'label_bottom2'     : True,
+            'label_right2'      : False,
+            'label_left2'       : True,
+
+            'axis_left_on'      : True,
+            'axis_right_on'     : True,
+            'axis_top_on'       : True,
+            'axis_bottom_on'    : True,
+            'axis_left_on2'     : True,
+            'axis_right_on2'    : True,
+            'axis_top_on2'      : True,
+            'axis_bottom_on2'   : True,
             }
 
         self.default_line_settings = {
@@ -256,6 +395,8 @@ class PlotTab(wx.Panel):
 
         self.plotted_data = {}
         self.line_settings = {}
+
+        self.update_plot_settings()
 
     def ax_redraw(self, widget=None):
         self.canvas.mpl_disconnect(self.cid)
@@ -320,7 +461,8 @@ class PlotTab(wx.Panel):
                 lines2 = None
                 fitlines = None
             elif self.plot_type == 'guinier' and fit is not None:
-                lines1 = self.subplot1.errorbar(x, y, err, zorder=1)
+                lines1 = self.subplot1.errorbar(x[q_idx_min:q_idx_max+1], y[q_idx_min:q_idx_max+1], 
+                    err[q_idx_min:q_idx_max+1], zorder=1)
                 fitlines = self.subplot1.plot(x[q_idx_min:q_idx_max+1], fit[q_idx_min:q_idx_max+1], color='k', zorder=2)
                 lines2 = self.subplot2.plot(x[q_idx_min:q_idx_max+1], residual[q_idx_min:q_idx_max+1], 'o', zorder=2)
                 zero_line = self.subplot2.axhline(color='k', zorder=1)
@@ -365,195 +507,31 @@ class PlotTab(wx.Panel):
 
     def do_auto_limits(self):
 
-        min_x_scale = self.plot_settings['min_x_scale']
-        max_x_scale = self.plot_settings['max_x_scale']
-        min_y_scale = self.plot_settings['min_y_scale']
-        max_y_scale = self.plot_settings['max_y_scale']
+        if self.plot_type != 'guinier':
+            plots = [self.subplot1]
+        elif self.plot_type == 'guinier':
+            plots = [self.subplot1, self.subplot2]
 
-        if self.plot_type == 'guinier':
-            plot_q_min = 0
-            plot_q_max = 0
+        for plot in plots:
+            plot.set_autoscale_on(True)
 
-            residual_min = None
-            residual_max = None
+            oldx = plot.get_xlim()
+            oldy = plot.get_ylim()
 
-            intensity_min = None
-            intensity_max = None
+            plot.relim()
+            plot.autoscale_view()
 
-            for key in self.plotted_data:
-                if self.plotted_data[key]['lines'][0] is not None:
-                    data = self.plotted_data[key]['data']
-                    
-                    q_min = data.guinier_qmin
-                    q_max = data.guinier_qmax
-
-                    plot_q_min = min(plot_q_min, q_min)
-                    plot_q_max = max(plot_q_max, q_max)
-
-                    rmin = np.min(data.guinier_residual[data.q_idx_min:data.q_idx_max+1])
-                    rmax = np.max(data.guinier_residual[data.q_idx_min:data.q_idx_max+1])
-
-                    imin = np.min(data.guinier_fit[data.q_idx_min:data.q_idx_max+1])
-                    imax = np.max(data.guinier_fit[data.q_idx_min:data.q_idx_max+1])
-                    imin2 = np.min(data.i[data.q_idx_min:data.q_idx_max+1])
-                    imax2 = np.max(data.i[data.q_idx_min:data.q_idx_max+1])
-
-                    if residual_min is None:
-                        residual_min = rmin
-                    else:
-                        residual_min = min(rmin, residual_min)
-
-                    if residual_max is None:
-                        residual_max = rmax
-                    else:
-                        residual_max = max(rmax, residual_max)
-
-                    if intensity_min is None:
-                        intensity_min = min(imin, imin2)
-                    else:
-                        intensity_min = min(imin, imin2, intensity_min)
-
-                    if intensity_max is None:
-                        intensity_max = max(imax, imax2)
-                    else:
-                        intensity_max = max(imax, imax2, intensity_max)
-
-            if plot_q_max == 0:
-                plot_q_max = 0.1
-
-            if residual_min is None:
-                residual_min = 0
-
-            if residual_max is None:
-                residual_max = 0.1
-
-            if intensity_min is None:
-                intensity_min = 0.01
-
-            if intensity_max is None:
-                intensity_max = 0.1
-
-            self.subplot1.set_xlim(plot_q_min**2*min_x_scale, plot_q_max**2*max_x_scale)
-            self.subplot1.set_ylim(intensity_min*min_y_scale, intensity_max*max_y_scale)
-            self.subplot2.set_ylim(residual_min*min_y_scale, residual_max*max_y_scale)
-
-        elif self.plot_type == 'loglog' or self.plot_type == 'loglin':
-
-            plot_q_min = None
-            plot_q_max = None
-
-            intensity_min = None
-            intensity_max = None
-
-            for key in self.plotted_data:
-                if self.plotted_data[key]['lines'][0] is not None:
-                    data = self.plotted_data[key]['data']
-
-                    q_min = data.q[0]
-                    q_max = data.q[-1]
-
-                    imin = np.min(data.i[data.i>0])
-                    imax = np.max(data.i)
-
-                    if plot_q_min is None:
-                        plot_q_min = q_min
-                    else:
-                        plot_q_min = min(plot_q_min, q_min)
-
-                    if plot_q_max is None:
-                        plot_q_max = q_max
-                    else:
-                        plot_q_max = max(plot_q_max, q_max)
-
-                    if intensity_min is None:
-                        intensity_min = imin
-                    else:
-                        intensity_min = min(imin, intensity_min)
-
-                    if intensity_max is None:
-                        intensity_max = imax
-                    else:
-                        intensity_max = max(imax, intensity_max)
-
-            if plot_q_min is None:
-                plot_q_min = 0
-
-            if plot_q_max is None:
-                plot_q_max = 0.1
-
-            if intensity_min is None:
-                intensity_min = 0.01
-
-            if intensity_max is None:
-                intensity_max = 0.1
-
-            self.subplot1.set_xlim(plot_q_min*min_x_scale, plot_q_max*max_x_scale)
-            self.subplot1.set_ylim(intensity_min*min_y_scale, intensity_max*max_y_scale)
-
-        elif self.plot_type == 'dimkratky':
-
-            plot_q_min = None
-            plot_q_max = None
-
-            intensity_min = None
-            intensity_max = None
-
-            for key in self.plotted_data:
-                if self.plotted_data[key]['lines'][0] is not None:
-                    data = self.plotted_data[key]['data']
-
-
-                    q_min = data.q[0]*data.rg
-                    q_max = data.q[-1]*data.rg
-
-                    y = (data.q*data.rg)**2*data.i/data.i0
-
-                    imin = np.min(y[y>0])
-                    imax = np.max(y[y>0])
-
-
-                    if plot_q_min is None:
-                        plot_q_min = q_min
-                    else:
-                        plot_q_min = min(plot_q_min, q_min)
-
-                    if plot_q_max is None:
-                        plot_q_max = q_max
-                    else:
-                        plot_q_max = max(plot_q_max, q_max)
-
-                    if intensity_min is None:
-                        intensity_min = imin
-                    else:
-                        intensity_min = min(imin, intensity_min)
-
-                    if intensity_max is None:
-                        intensity_max = imax
-                    else:
-                        intensity_max = max(imax, intensity_max)
-
-            if plot_q_min is None:
-                plot_q_min = 0
-
-            if plot_q_max is None:
-                plot_q_max = 0.1
-
-            if intensity_min is None:
-                intensity_min = 0
-
-            if intensity_max is None:
-                intensity_max = 0.1
-
-            self.subplot1.set_xlim(plot_q_min*min_x_scale, plot_q_max*max_x_scale)
-            self.subplot1.set_ylim(intensity_min*min_y_scale, intensity_max*max_y_scale)
-
-        elif self.plot_type == 'ift':
-            pass
-
-        elif self.plot_type == 'series':
-            pass
+            newx = plot.get_xlim()
+            newy = plot.get_ylim()
 
         self.canvas.draw()
+
+    def change_plot_settings(self, settings):
+
+        for key, value in settings.items():
+            self.plot_settings[key] = value
+
+        self.update_plot_settings()
 
     def update_line_settings(self, data):
 
@@ -575,3 +553,227 @@ class PlotTab(wx.Panel):
                 line.set_marker(line_settings['default_marker_style'])
             else:
                 line.set_marker(next(line_settings['default_marker_cycler']))
+
+    def update_plot_settings(self):
+
+        self.set_axes_settings()
+        self.set_ticks_settings()
+
+        self.canvas.draw()
+
+    def set_ticks_settings(self):
+
+        axes = {}
+        axes2 = {}
+        axeslabel = {}
+        axeslabel2 = {}
+
+        if self.plot_settings['axis_bottom_on']:
+            axes['bottom'] = True
+        else:
+            axes['bottom'] = False
+
+        if self.plot_settings['axis_top_on']:
+            axes['top'] = True
+        else:
+            axes['top'] = False
+
+        if self.plot_settings['axis_left_on']:
+            axes['left'] = True
+        else:
+            axes['left'] = False
+
+        if self.plot_settings['axis_right_on']:
+            axes['right'] = True
+        else:
+            axes['right'] = False
+
+        if self.plot_settings['axis_bottom_on2']:
+            axes2['bottom'] = True
+        else:
+            axes2['bottom'] = False
+
+        if self.plot_settings['axis_top_on2']:
+            axes2['top'] = True
+        else:
+            axes2['top'] = False
+
+        if self.plot_settings['axis_left_on2']:
+            axes2['left'] = True
+        else:
+            axes2['left'] = False
+
+        if self.plot_settings['axis_right_on2']:
+            axes2['right'] = True
+        else:
+            axes2['right'] = False
+
+
+        if self.plot_settings['axis_bottom_on'] and self.plot_settings['label_bottom']:
+            axeslabel['labelbottom'] = True
+        else:
+            axeslabel['labelbottom'] = False
+
+        if self.plot_settings['axis_top_on'] and self.plot_settings['label_top']:
+            axeslabel['labeltop'] = True
+        else:
+            axeslabel['labeltop'] = False
+
+        if self.plot_settings['axis_left_on'] and self.plot_settings['label_left']:
+            axeslabel['labelleft'] = True
+        else:
+            axeslabel['labelleft'] = False
+
+        if self.plot_settings['axis_right_on'] and self.plot_settings['label_right']:
+            axeslabel['labelright'] = True
+        else:
+            axeslabel['labelright'] = False
+
+        if self.plot_settings['axis_bottom_on2'] and self.plot_settings['label_bottom2']:
+            axeslabel2['labelbottom'] = True
+        else:
+            axeslabel2['labelbottom'] = False
+
+        if self.plot_settings['axis_top_on2'] and self.plot_settings['label_top2']:
+            axeslabel2['labeltop'] = True
+        else:
+            axeslabel2['labeltop'] = False
+
+        if self.plot_settings['axis_left_on2'] and self.plot_settings['label_left2']:
+            axeslabel2['labelleft'] = True
+        else:
+            axeslabel2['labelleft'] = False
+
+        if self.plot_settings['axis_right_on2'] and self.plot_settings['label_right2']:
+            axeslabel2['labelright'] = True
+        else:
+            axeslabel2['labelright'] = False
+
+        if self.subplot1 is not None:
+            if self.plot_settings['major_ticks_x'] and self.plot_settings['minor_ticks_x']:
+                self.subplot1.tick_params(which='both', direction=self.plot_settings['tick_position_x'], axis='x',
+                    **axes, **axeslabel)
+
+            elif self.plot_settings['major_ticks_x']:
+                self.subplot1.tick_params(which='major', direction=self.plot_settings['tick_position_x'], axis='x',
+                    **axes, **axeslabel)
+                self.subplot1.tick_params(which='minor', axis='x', left=False, right=False, top=False, bottom=False,
+                    labelleft=False, labelright=False, labeltop=False, labelbottom=False)
+
+            elif self.plot_settings['minor_ticks_x']:
+                self.subplot1.tick_params(which='minor', direction=self.plot_settings['tick_position_x'], axis='x',
+                    **axes, **axeslabel)
+                self.subplot1.tick_params(which='major', axis='x', left=False, right=False, top=False, bottom=False,
+                    labelleft=False, labelright=False, labeltop=False, labelbottom=False)
+
+            else:
+                self.subplot1.tick_params(which='both', axis='x', left=False, right=False, top=False, bottom=False,
+                    labelleft=False, labelright=False, labeltop=False, labelbottom=False)
+                
+
+            if self.plot_settings['major_ticks_y'] and self.plot_settings['minor_ticks_y']:
+                self.subplot1.tick_params(which='both', direction=self.plot_settings['tick_position_y'], axis='y',
+                    **axes, **axeslabel)
+
+            elif self.plot_settings['major_ticks_y']:
+                self.subplot1.tick_params(which='major', direction=self.plot_settings['tick_position_y'], axis='y',
+                    **axes, **axeslabel)
+                self.subplot1.tick_params(which='minor', axis='y', left=False, right=False, top=False, bottom=False,
+                    labelleft=False, labelright=False, labeltop=False, labelbottom=False)
+
+            elif self.plot_settings['minor_ticks_y']:
+                self.subplot1.tick_params(which='minor', direction=self.plot_settings['tick_position_y'], axis='y',
+                    **axes, **axeslabel)
+                self.subplot1.tick_params(which='major', axis='y', left=False, right=False, top=False, bottom=False,
+                    labelleft=False, labelright=False, labeltop=False, labelbottom=False)
+
+            else:
+                self.subplot1.tick_params(which='both', axis='y', left=False, right=False, top=False, bottom=False,
+                    labelleft=False, labelright=False, labeltop=False, labelbottom=False)
+
+
+        if self.subplot2 is not None:
+            if self.plot_settings['major_ticks_x2'] and self.plot_settings['minor_ticks_x2']:
+                self.subplot2.tick_params(which='both', direction=self.plot_settings['tick_position_x2'], axis='x',
+                    **axes2, **axeslabel2)
+
+            elif self.plot_settings['major_ticks_x2']:
+                self.subplot2.tick_params(which='major', direction=self.plot_settings['tick_position_x2'], axis='x',
+                    **axes2, **axeslabel2)
+                self.subplot2.tick_params(which='minor', axis='x', left=False, right=False, top=False, bottom=False,
+                    labelleft=False, labelright=False, labeltop=False, labelbottom=False)
+
+            elif self.plot_settings['minor_ticks_x2']:
+                self.subplot2.tick_params(which='minor', direction=self.plot_settings['tick_position_x2'], axis='x',
+                    **axes2, **axeslabel2)
+                self.subplot2.tick_params(which='major', axis='x', left=False, right=False, top=False, bottom=False,
+                    labelleft=False, labelright=False, labeltop=False, labelbottom=False)
+
+            else:
+                self.subplot2.tick_params(which='both', axis='x', left=False, right=False, top=False, bottom=False,
+                    labelleft=False, labelright=False, labeltop=False, labelbottom=False)
+                
+
+            if self.plot_settings['major_ticks_y2'] and self.plot_settings['minor_ticks_y2']:
+                self.subplot2.tick_params(which='both', direction=self.plot_settings['tick_position_y2'], axis='y',
+                    **axes2, **axeslabel2)
+
+            elif self.plot_settings['major_ticks_y2']:
+                self.subplot2.tick_params(which='major', direction=self.plot_settings['tick_position_y2'], axis='y',
+                    **axes2, **axeslabel2)
+                self.subplot2.tick_params(which='minor', axis='y', left=False, right=False, top=False, bottom=False,
+                    labelleft=False, labelright=False, labeltop=False, labelbottom=False)
+
+            elif self.plot_settings['minor_ticks_y2']:
+                self.subplot2.tick_params(which='minor', direction=self.plot_settings['tick_position_y2'], axis='y',
+                    **axes2, **axeslabel2)
+                self.subplot2.tick_params(which='major', axis='y', left=False, right=False, top=False, bottom=False,
+                    labelleft=False, labelright=False, labeltop=False, labelbottom=False)
+
+            else:
+                self.subplot2.tick_params(which='both', axis='y', left=False, right=False, top=False, bottom=False,
+                    labelleft=False, labelright=False, labeltop=False, labelbottom=False)
+
+    def set_axes_settings(self):
+
+        if self.subplot1 is not None:
+            if self.plot_settings['axis_left_on']:
+                self.subplot1.spines['left'].set_color('black')
+            else:
+                self.subplot1.spines['left'].set_color('none')
+
+            if self.plot_settings['axis_right_on']:
+                self.subplot1.spines['right'].set_color('black')
+            else:
+                self.subplot1.spines['right'].set_color('none')
+
+            if self.plot_settings['axis_top_on']:
+                self.subplot1.spines['top'].set_color('black')
+            else:
+                self.subplot1.spines['top'].set_color('none')
+
+            if self.plot_settings['axis_bottom_on']:
+                self.subplot1.spines['bottom'].set_color('black')
+            else:
+                self.subplot1.spines['bottom'].set_color('none')
+
+        if self.subplot2 is not None:
+            if self.plot_settings['axis_left_on2']:
+                self.subplot2.spines['left'].set_color('black')
+            else:
+                self.subplot2.spines['left'].set_color('none')
+
+            if self.plot_settings['axis_right_on2']:
+                self.subplot2.spines['right'].set_color('black')
+            else:
+                self.subplot2.spines['right'].set_color('none')
+
+            if self.plot_settings['axis_top_on2']:
+                self.subplot2.spines['top'].set_color('black')
+            else:
+                self.subplot2.spines['top'].set_color('none')
+
+            if self.plot_settings['axis_bottom_on2']:
+                self.subplot2.spines['bottom'].set_color('black')
+            else:
+                self.subplot2.spines['bottom'].set_color('none')
