@@ -43,6 +43,8 @@ from matplotlib.figure import Figure
 import matplotlib.colors as mplcol
 
 mpl.rcParams['backend'] = 'WxAgg'
+# mpl.rcParams['font.family'] = ['fantasy']
+# mpl.rcParams['font.fantasy'] = ['xkcd']
 
 import Data
 
@@ -71,6 +73,36 @@ class PlotPanel(wx.Panel):
             }
 
         self.plot_ctrls = {}
+        self.translation = {
+            'tick_position_x'   : {'inside' : 'in',
+                'cross' : 'inout',
+                'outside' : 'out'},
+            'tick_position_y'   : {'inside' : 'in',
+                'cross' : 'inout',
+                'outside' : 'out'},
+        }
+
+        self.reverse_translation = {}
+
+        for key in self.translation:
+            self.reverse_translation[key] = {value2 : key2 for (key2, value2) in self.translation[key].items()}
+
+        self.fonts = mpl.rcParams['font.cursive']+ mpl.rcParams['font.fantasy'] \
+            + mpl.rcParams['font.monospace'] + mpl.rcParams['font.sans-serif'] \
+            + mpl.rcParams['font.serif']
+
+        try:
+            self.fonts.remove('cursive')
+            self.fonts.remove('fantasy')
+            self.fonts.remove('monospace')
+            self.fonts.remove('serif')
+            self.fonts.remove('sans-serif')
+        except Exception:
+            pass
+
+        print (mpl.rcParams['font.family'])
+
+        self.fonts.sort(key=str.lower)
 
     def _create_layout(self):
 
@@ -86,7 +118,7 @@ class PlotPanel(wx.Panel):
 
         self.plot_notebook.Bind(aui.EVT_AUINOTEBOOK_PAGE_CHANGED, self._on_plot_change)
 
-        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer = wx.BoxSizer(wx.HORIZONTAL)
         top_sizer.Add(ctrl_sizer, border=5, flag=wx.ALL|wx.EXPAND, proportion=1)
         top_sizer.Add(self.plot_notebook, border=5, flag=wx.ALL|wx.EXPAND, proportion=2)
 
@@ -116,6 +148,12 @@ class PlotPanel(wx.Panel):
         axes_sizer.Add(bottom_axis)
         axes_sizer.Add(top_axis)
 
+        tick_position_x = wx.Choice(top_panel, choices=['Inside', 'Cross', 'Outside'])
+        tick_position_y = wx.Choice(top_panel, choices=['Inside', 'Cross', 'Outside'])
+
+        tick_position_x.Bind(wx.EVT_CHOICE, self._on_plot_update)
+        tick_position_y.Bind(wx.EVT_CHOICE, self._on_plot_update)
+
         major_x_axis = wx.CheckBox(top_panel, label='X')
         major_y_axis = wx.CheckBox(top_panel, label='Y')
 
@@ -136,22 +174,56 @@ class PlotPanel(wx.Panel):
         minor_sizer.Add(minor_x_axis)
         minor_sizer.Add(minor_y_axis)
 
-        top_sizer = wx.FlexGridSizer(rows=3, cols=2, vgap=2, hgap=2)
+        left_label = wx.CheckBox(top_panel, label='Left')
+        right_label = wx.CheckBox(top_panel, label='Right')
+        bottom_label = wx.CheckBox(top_panel, label='Bottom')
+        top_label = wx.CheckBox(top_panel, label='Top')
+
+        left_label.Bind(wx.EVT_CHECKBOX, self._on_plot_update)
+        right_label.Bind(wx.EVT_CHECKBOX, self._on_plot_update)
+        bottom_label.Bind(wx.EVT_CHECKBOX, self._on_plot_update)
+        top_label.Bind(wx.EVT_CHECKBOX, self._on_plot_update)
+
+        label_sizer = wx.FlexGridSizer(rows=2, cols=2, vgap=2, hgap=2)
+        label_sizer.Add(left_label)
+        label_sizer.Add(right_label)
+        label_sizer.Add(bottom_label)
+        label_sizer.Add(top_label)
+
+        top_sizer = wx.FlexGridSizer(cols=2, vgap=2, hgap=2)
         top_sizer.Add(wx.StaticText(top_panel, label='Axes'))
         top_sizer.Add(axes_sizer)
+        top_sizer.Add(wx.StaticText(top_panel, label='X Tick Position'))
+        top_sizer.Add(tick_position_x)
+        top_sizer.Add(wx.StaticText(top_panel, label='Y Tick Position'))
+        top_sizer.Add(tick_position_y)
         top_sizer.Add(wx.StaticText(top_panel, label='Major Ticks'))
         top_sizer.Add(major_sizer)
         top_sizer.Add(wx.StaticText(top_panel, label='Minor Ticks'))
         top_sizer.Add(minor_sizer)
+        top_sizer.Add(wx.StaticText(top_panel, label='Labels'))
+        top_sizer.Add(label_sizer)
 
         self.plot_ctrls['axis_left_on'] = (left_axis, left_axis.GetValue, left_axis.SetValue, 'bool')
         self.plot_ctrls['axis_right_on'] = (right_axis, right_axis.GetValue, right_axis.SetValue, 'bool')
         self.plot_ctrls['axis_top_on'] = (top_axis, top_axis.GetValue, top_axis.SetValue, 'bool')
         self.plot_ctrls['axis_bottom_on'] = (bottom_axis, bottom_axis.GetValue, bottom_axis.SetValue, 'bool')
+        self.plot_ctrls['tick_position_x'] = (tick_position_x, tick_position_x.GetStringSelection, 
+            tick_position_x.SetStringSelection, 'str')
+        self.plot_ctrls['tick_position_y'] = (tick_position_y, tick_position_y.GetStringSelection, 
+            tick_position_y.SetStringSelection, 'str')
         self.plot_ctrls['major_ticks_x'] = (major_x_axis, major_x_axis.GetValue, major_x_axis.SetValue, 'bool')
         self.plot_ctrls['major_ticks_y'] = (major_y_axis, major_y_axis.GetValue, major_y_axis.SetValue, 'bool')
         self.plot_ctrls['minor_ticks_x'] = (minor_x_axis, minor_x_axis.GetValue, minor_x_axis.SetValue, 'bool')
         self.plot_ctrls['minor_ticks_y'] = (minor_y_axis, minor_y_axis.GetValue, minor_y_axis.SetValue, 'bool')
+        self.plot_ctrls['label_left'] = (left_label, left_label.GetValue, left_label.SetValue, 'bool')
+        self.plot_ctrls['label_right'] = (right_label, right_label.GetValue, right_label.SetValue, 'bool')
+        self.plot_ctrls['label_top'] = (top_label, top_label.GetValue, top_label.SetValue, 'bool')
+        self.plot_ctrls['label_bottom'] = (bottom_label, bottom_label.GetValue, bottom_label.SetValue, 'bool')
+
+        # Be good to be able to set tick font and font size
+        # Be good to be able to set tick label offset from axis
+        # Custom tick labels?
 
         top_panel.SetSizer(top_sizer)
 
@@ -248,6 +320,9 @@ class PlotPanel(wx.Panel):
         elif self.plot_ctrls[item_key][3] == 'float':
             value = float(value)
 
+        if item_key in self.translation:
+            value = self.translation[item_key][value.lower()]
+
         update_dict = {item_key :  value}
 
         current_plot_tab = self.plot_notebook.GetCurrentPage()
@@ -266,6 +341,9 @@ class PlotPanel(wx.Panel):
 
                 if key in self.plot_ctrls:
                     item_vals = self.plot_ctrls[key]
+
+                    if key in self.reverse_translation:
+                        value = self.reverse_translation[key][value]
 
                     if item_vals[3] == 'bool':
                         item_vals[2](value)
@@ -375,6 +453,14 @@ class PlotTab(wx.Panel):
             'label_bottom2'     : True,
             'label_right2'      : False,
             'label_left2'       : True,
+            'tick_x_font'       : 'Humor Sans',
+            'tick_y_font'       : 'Humor Sans',
+            'tick_x_size'       : 20,
+            'tick_y_size'       : 20,
+            'tick_x2_font'      : 'Humor Sans',
+            'tick_y2_font'      : 'Humor Sans',
+            'tick_x2_size'      : 20,
+            'tick_y2_size'      : 20,
 
             'axis_left_on'      : True,
             'axis_right_on'     : True,
@@ -691,6 +777,15 @@ class PlotTab(wx.Panel):
                 self.subplot1.tick_params(which='both', axis='y', left=False, right=False, top=False, bottom=False,
                     labelleft=False, labelright=False, labeltop=False, labelbottom=False)
 
+            self.subplot1.tick_params(which='both', axis='x', labelsize=self.plot_settings['tick_x_size'])
+            self.subplot1.tick_params(which='both', axis='y', labelsize=self.plot_settings['tick_y_size'])
+
+            for tick in self.subplot1.get_xticklabels(which='both'):
+                tick.set_fontname(self.plot_settings['tick_x_font'])
+
+            for tick in self.subplot1.get_yticklabels(which='both'):
+                tick.set_fontname(self.plot_settings['tick_y_font'])
+
 
         if self.subplot2 is not None:
             if self.plot_settings['major_ticks_x2'] and self.plot_settings['minor_ticks_x2']:
@@ -733,6 +828,15 @@ class PlotTab(wx.Panel):
             else:
                 self.subplot2.tick_params(which='both', axis='y', left=False, right=False, top=False, bottom=False,
                     labelleft=False, labelright=False, labeltop=False, labelbottom=False)
+
+            self.subplot2.tick_params(which='both', axis='x', labelsize=self.plot_settings['tick_x2_size'])
+            self.subplot2.tick_params(which='both', axis='y', labelsize=self.plot_settings['tick_y2_size'])
+
+            for tick in self.subplot2.get_xticklabels(which='both'):
+                tick.set_fontname(self.plot_settings['tick_x2_font'])
+
+            for tick in self.subplot2.get_yticklabels(which='both'):
+                tick.set_fontname(self.plot_settings['tick_y2_font'])
 
     def set_axes_settings(self):
 

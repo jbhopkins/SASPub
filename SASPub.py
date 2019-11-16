@@ -32,6 +32,7 @@ import threading
 
 import wx
 import wx.aui as aui
+import wx.lib.agw.aui as agwaui
 
 import DataPanel
 import PlotPanel
@@ -59,34 +60,24 @@ class MainFrame(wx.Frame):
 
         self.Bind(wx.EVT_CLOSE, self._on_close)
 
-        # self.Layout()
-        # self.Fit()
-
     def _create_layout(self):
-        self._mgr = aui.AuiManager()
+        self._mgr = agwaui.AuiManager(agwFlags=agwaui.AUI_MGR_ALLOW_FLOATING|agwaui.AUI_MGR_AUTONB_NO_CAPTION)
+        self._mgr.SetAutoNotebookStyle(agwaui.AUI_NB_TOP|agwaui.AUI_NB_TAB_MOVE)
         self._mgr.SetManagedWindow(self)
 
         self.data_panel = DataPanel.DataPanel(self)
         self.plot_panel = PlotPanel.PlotPanel(self)
         self.figure_panel = FigurePanel.FigurePanel(self)
 
-        self._mgr.AddPane(self.data_panel, aui.AuiPaneInfo().CloseButton(False).Left().
-            Layer(0).Caption("Data Panel").PinButton(True).Row(0).Position(0))
-        self._mgr.AddPane(self.plot_panel, aui.AuiPaneInfo().CloseButton(False).Center().
-            Layer(0).Caption("Plot Panel").PinButton(True).Row(0).Position(0))
-        self._mgr.AddPane(self.figure_panel, aui.AuiPaneInfo().CloseButton(False).Right().
-            Layer(0).Caption("Figure Panel").PinButton(True).Row(0).Position(0))
-
-        
-
         size = self.GetSize()
-        self._mgr.GetPane(self.data_panel).MinSize(300,-1)
-        self._mgr.GetPane(self.plot_panel).MinSize((size[0]-300.)/2., -1)
-        self._mgr.GetPane(self.figure_panel).MinSize((size[0]-300.)/2., -1)
 
-        self._mgr.GetPane(self.data_panel).FloatingSize(300, size[1])
-        self._mgr.GetPane(self.plot_panel).FloatingSize((size[0]-300.)/2., size[1])
-        self._mgr.GetPane(self.figure_panel).FloatingSize((size[0]-300.)/2., size[1])
+        pane_info = agwaui.AuiPaneInfo().CloseButton(False).Center().PaneBorder(False).Caption('Data').Dockable(False).Gripper(False).FloatingSize(size).MaximizeButton(True).MinimizeButton(True)
+        plot_pane_info = agwaui.AuiPaneInfo().CloseButton(False).Center().PaneBorder(False).Caption('Plots').Dockable(False).Gripper(False).FloatingSize(size).MaximizeButton(True).MinimizeButton(True)
+        figure_pane_info = agwaui.AuiPaneInfo().CloseButton(False).Center().PaneBorder(False).Caption('Figures').Dockable(False).Gripper(False).FloatingSize(size).MaximizeButton(True).MinimizeButton(True)
+
+        self._mgr.AddPane(self.data_panel, pane_info )
+        self._mgr.AddPane(self.plot_panel, plot_pane_info, target=pane_info)
+        self._mgr.AddPane(self.figure_panel, figure_pane_info, target=pane_info)
 
         self._mgr.Update()
 
